@@ -13,7 +13,7 @@
 // It is also possible to install your own function outside this package for
 // retrieving OpenGL function pointers, to do this see InitWithProcAddrFunc.
 
-package gles2
+package gl
 
 /*
 #cgo windows CFLAGS: -DTAG_WINDOWS
@@ -29,7 +29,7 @@ package gles2
 #if defined(TAG_EGL)
 	#include <stdlib.h>
 	#include <EGL/egl.h>
-	void* GlowGetProcAddress_gles231(const char* name) {
+	void* GlowGetProcAddress_glcore41(const char* name) {
 		return eglGetProcAddress(name);
 	}
 #elif defined(TAG_WINDOWS)
@@ -37,7 +37,7 @@ package gles2
 	#include <windows.h>
 	#include <stdlib.h>
 	static HMODULE ogl32dll = NULL;
-	void* GlowGetProcAddress_gles231(const char* name) {
+	void* GlowGetProcAddress_glcore41(const char* name) {
 		void* pf = wglGetProcAddress((LPCSTR) name);
 		if (pf) {
 			return pf;
@@ -50,13 +50,13 @@ package gles2
 #elif defined(TAG_DARWIN)
 	#include <stdlib.h>
 	#include <dlfcn.h>
-	void* GlowGetProcAddress_gles231(const char* name) {
+	void* GlowGetProcAddress_glcore41(const char* name) {
 		return dlsym(RTLD_DEFAULT, name);
 	}
 #elif defined(TAG_POSIX)
 	#include <stdlib.h>
 	#include <GL/glx.h>
-	void* GlowGetProcAddress_gles231(const char* name) {
+	void* GlowGetProcAddress_glcore41(const char* name) {
 		return glXGetProcAddress((const GLubyte *) name);
 	}
 #endif
@@ -67,5 +67,5 @@ import "unsafe"
 func getProcAddress(namea string) unsafe.Pointer {
 	cname := C.CString(namea)
 	defer C.free(unsafe.Pointer(cname))
-	return C.GlowGetProcAddress_gles231(cname)
+	return C.GlowGetProcAddress_glcore41(cname)
 }
