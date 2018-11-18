@@ -1,9 +1,9 @@
-#version 410
+#version 410 core
 
-precision mediump float;
+uniform vec4 uColor;
 
 out vec4 color;
 
 void main() {
-    color = vec4(1, 0, 0, 1);
+    color = uColor;
 }

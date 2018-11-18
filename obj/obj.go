@@ -16,6 +16,24 @@ type Object struct {
 	Vertices  []mgl32.Vec3
 	Normals   []mgl32.Vec3
 	TexCoords []mgl32.Vec2
+	Material  *Material
+}
+
+type Material struct {
+	Name                 string
+	Ambient              mgl32.Vec4
+	Diffuse              mgl32.Vec4
+	Specular             mgl32.Vec4
+	Shininess            float32
+	Dissolve             float32
+	AmbientMap           string
+	DiffuseMap           string
+	SpecularMap          string
+	SpecularHighlightMap string
+	BumpMap              string
+	AlphaMap             string
+	DisplacementMap      string
+	ReflectionMap        string
 }
 
 type LoadFunc func(string) ([]byte, error)
@@ -43,10 +61,11 @@ type reader struct {
 	load     LoadFunc
 }
 
-func (r *reader) Read() ([]*Object, error) {
+func (rdr *reader) Read() ([]*Object, error) {
 	objects := []*Object{}
+	materials := map[string]*Material{}
 
-	file, err := r.load(r.filename)
+	file, err := rdr.load(rdr.filename)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +84,7 @@ func (r *reader) Read() ([]*Object, error) {
 	txcds := []mgl32.Vec2{}
 
 	for {
-		b, err := buf.ReadBytes('\n')
+		bytes, err := buf.ReadBytes('\n')
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -74,7 +93,7 @@ func (r *reader) Read() ([]*Object, error) {
 			}
 		}
 
-		line := string(b)
+		line := string(bytes)
 
 		if len(line) < 2 || line[0] == '#' || line[0] == '\n' {
 			continue
@@ -155,10 +174,16 @@ func (r *reader) Read() ([]*Object, error) {
 			}
 			objects = append(objects, o)
 		} else if strings.HasPrefix(line, "mtllib") {
-			fmt.Printf("Loading material [%s]\n", filepath.Join(
-				filepath.Dir(r.filename),
+			tmp, err := rdr.readMaterial(filepath.Join(
+				filepath.Dir(rdr.filename),
 				strings.TrimSpace(line[7:]),
 			))
+			if err != nil {
+				return nil, err
+			}
+			for k, v := range tmp {
+				materials[k] = v
+			}
 		} else if strings.HasPrefix(line, "usemtl") {
 			if o == nil {
 				o = &Object{
@@ -166,8 +191,105 @@ func (r *reader) Read() ([]*Object, error) {
 				}
 				objects = append(objects, o)
 			}
+
+			name := strings.TrimSpace(line[7:])
+			if m, ok := materials[name]; ok {
+				o.Material = m
+			}
 		}
 	}
 
 	return objects, nil
+}
+
+func (rdr *reader) readMaterial(filename string) (map[string]*Material, error) {
+	materials := map[string]*Material{}
+
+	file, err := rdr.load(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	buf := bytes.NewBuffer(file)
+
+	var m *Material
+
+	for {
+		bytes, err := buf.ReadBytes('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return nil, err
+			}
+		}
+
+		line := string(bytes)
+
+		if len(line) < 2 || line[0] == '#' || line[0] == '\n' {
+			continue
+		}
+
+		if strings.HasPrefix(line, "newmtl") { // newmtl
+			name := strings.TrimSpace(line[7:])
+			m = &Material{
+				Name:     name,
+				Ambient:  mgl32.Vec4{0, 0, 0, 1},
+				Diffuse:  mgl32.Vec4{0, 0, 0, 1},
+				Specular: mgl32.Vec4{0, 0, 0, 1},
+			}
+			materials[name] = m
+		} else if line[0] == 'K' {
+			if line[1] == 'a' {
+				if m != nil {
+					// Ka
+					fmt.Sscanf(line[3:], "%f %f %f", &m.Ambient[0], &m.Ambient[1], &m.Ambient[2])
+				}
+			} else if line[1] == 'd' {
+				if m != nil {
+					// Kd
+					fmt.Sscanf(line[3:], "%f %f %f", &m.Diffuse[0], &m.Diffuse[1], &m.Diffuse[2])
+				}
+			} else if line[1] == 's' {
+				if m != nil {
+					// Ks
+					fmt.Sscanf(line[3:], "%f %f %f", &m.Specular[0], &m.Specular[1], &m.Specular[2])
+				}
+			}
+		} else if line[0] == 'N' && line[1] == 's' {
+			// Ns
+			fmt.Sscanf(line[3:], "%f", &m.Shininess)
+		} else if strings.HasPrefix(line, "map_K") {
+			if line[5] == 'a' {
+				// map_Ka
+				m.AmbientMap = strings.TrimSpace(line[7:])
+			} else if line[5] == 'd' {
+				// map_Kd
+				m.DiffuseMap = strings.TrimSpace(line[7:])
+			} else if line[5] == 's' {
+				// map_Ks
+				m.SpecularMap = strings.TrimSpace(line[7:])
+			}
+		} else if strings.HasPrefix(line, "map_Ns") {
+			// map_Ns
+			m.SpecularHighlightMap = strings.TrimSpace(line[7:])
+		} else if strings.HasPrefix(line, "bump") {
+			// bump
+			m.BumpMap = strings.TrimSpace(line[5:])
+		} else if strings.HasPrefix(line, "map_bump") {
+			// map_bump
+			m.BumpMap = strings.TrimSpace(line[7:])
+		} else if strings.HasPrefix(line, "disp") {
+			// disp
+			m.DisplacementMap = strings.TrimSpace(line[5:])
+		} else if strings.HasPrefix(line, "refl") {
+			// refl
+			m.ReflectionMap = strings.TrimSpace(line[5:])
+		} else if strings.HasPrefix(line, "map_d") {
+			// map_d
+			m.AlphaMap = strings.TrimSpace(line[6:])
+		}
+	}
+
+	return materials, nil
 }

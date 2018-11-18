@@ -53,7 +53,6 @@ func (s *Shader) Delete() {
 
 func (s *Shader) Load(sources []string) error {
 	s.Delete()
-	s.ID = gl.CreateProgram()
 
 	shaders := make([]uint32, 0, len(sources))
 	for _, src := range sources {
@@ -64,6 +63,7 @@ func (s *Shader) Load(sources []string) error {
 		shaders = append(shaders, id)
 	}
 
+	s.ID = gl.CreateProgram()
 	for _, id := range shaders {
 		gl.AttachShader(s.ID, id)
 	}
@@ -96,6 +96,10 @@ func (s *Shader) Bind() error {
 
 	gl.UseProgram(s.ID)
 	return nil
+}
+
+func (s *Shader) GetUniformLocation(name string) int32 {
+	return gl.GetUniformLocation(s.ID, gl.Str(name+"\x00"))
 }
 
 func compileShader(filename string) (uint32, error) {
