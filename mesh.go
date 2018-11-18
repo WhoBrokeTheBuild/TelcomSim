@@ -4,7 +4,7 @@ import (
 	"C"
 
 	"github.com/WhoBrokeTheBuild/TelcomSim/obj"
-	gl "github.com/go-gl/gl/v3.1/gles2"
+	gl "github.com/go-gl/gl/v4.1-core/gl"
 )
 
 type Mesh struct {

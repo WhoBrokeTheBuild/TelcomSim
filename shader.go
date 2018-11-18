@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	gl "github.com/go-gl/gl/v3.1/gles2"
+	gl "github.com/go-gl/gl/v4.1-core/gl"
 )
 
 type Shader struct {
@@ -53,6 +53,7 @@ func (s *Shader) Delete() {
 
 func (s *Shader) Load(sources []string) error {
 	s.Delete()
+	s.ID = gl.CreateProgram()
 
 	shaders := make([]uint32, 0, len(sources))
 	for _, src := range sources {
@@ -63,7 +64,6 @@ func (s *Shader) Load(sources []string) error {
 		shaders = append(shaders, id)
 	}
 
-	s.ID = gl.CreateProgram()
 	for _, id := range shaders {
 		gl.AttachShader(s.ID, id)
 	}

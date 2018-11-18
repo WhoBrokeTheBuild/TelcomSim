@@ -1,4 +1,4 @@
-#version 300 es
+#version 410
 
 uniform mat4 projection;
 uniform mat4 camera;

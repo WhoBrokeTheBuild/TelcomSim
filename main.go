@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
-	gl "github.com/go-gl/gl/v3.1/gles2"
+	gl "github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.2/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 )
@@ -28,10 +28,10 @@ func main() {
 	defer glfw.Terminate()
 
 	glfw.WindowHint(glfw.Resizable, glfw.False)
-	glfw.WindowHint(glfw.ContextVersionMajor, 3)
+	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 1)
-	glfw.WindowHint(glfw.ClientAPI, glfw.OpenGLESAPI)
 	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
+	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	window, err := glfw.CreateWindow(WindowWidth, WindowHeight, "Telcom Simulator", nil, nil)
 	if err != nil {
 		panic(err)
