@@ -141,7 +141,7 @@ func (m *Mesh) Load(filename string) error {
 	gl.VertexAttribPointer(NormalAttrID, 3, gl.FLOAT, false, stride, gl.PtrOffset(3*F))
 
 	gl.EnableVertexAttribArray(TexCoordAttrID)
-	gl.VertexAttribPointer(TexCoordAttrID, 2, gl.FLOAT, false, stride, gl.PtrOffset(5*F))
+	gl.VertexAttribPointer(TexCoordAttrID, 2, gl.FLOAT, false, stride, gl.PtrOffset(6*F))
 
 	return nil
 }

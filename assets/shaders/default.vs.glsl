@@ -19,7 +19,7 @@ out vec3 p_ViewDir;
 void main() {
     p_Position = uModel * vec4(_Position, 1.0);
     p_Normal   = uModel * vec4(_Normal, 1.0);
-    p_TexCoord = _TexCoord;
+    p_TexCoord = vec2(_TexCoord.x, 1.0 - _TexCoord.y);
 
     p_LightDir = normalize(uLight - p_Position.xyz);
     p_ViewDir  = normalize(uCamera - p_Position.xyz);

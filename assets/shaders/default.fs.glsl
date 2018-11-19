@@ -16,14 +16,15 @@ in vec3 p_ViewDir;
 out vec4 _Color;
 
 void main() {
-    vec3 diffuse = texture(uDiffuseMap, p_TexCoord).rgb;
-    vec3 ambient = uAmbient;
-    vec3 specular = uSpecular;
+    vec3 ambient = uAmbient + texture(uAmbientMap, p_TexCoord).rgb;
+    vec3 diffuse = uDiffuse + texture(uDiffuseMap, p_TexCoord).rgb;
+    vec3 specular = uSpecular + texture(uSpecularMap, p_TexCoord).rgb;
 
-    vec4 normal = normalize(p_Normal);
+    vec3 normal = normalize(p_Normal.xyz);
+    diffuse *= max(dot(normal, p_LightDir), 0.0);
 
-    float diff = max(dot(normal.xyz, p_LightDir), 0.0);
-    diffuse *= diff;
+    vec3 halfway = normalize(p_LightDir + p_ViewDir);
+    specular *= pow(max(dot(normal, halfway), 0.0), 16.0) * 0.5;
 
-    _Color = vec4(texture(uDiffuseMap, p_TexCoord).rgb, 1.0);
+    _Color = vec4(ambient + diffuse + specular, 1.0);
 }

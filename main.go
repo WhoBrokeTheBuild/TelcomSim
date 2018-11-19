@@ -88,16 +88,15 @@ func main() {
 	defer s.Delete()
 
 	s.Bind()
-	Infof("%v", s.Uniforms)
 
-	light := mgl32.Vec3{3, 3, 3}
+	light := mgl32.Vec3{3, 3, 0}
 	camera := mgl32.Vec3{3, 3, 3}
 
 	gl.Uniform3fv(s.GetUniformLocation("uLight"), 1, &light[0])
 	gl.Uniform3fv(s.GetUniformLocation("uCamera"), 1, &camera[0])
 
-	m, err := NewMesh("assets/models/cube/cube.obj")
-	//m, err := NewMesh("assets/models/earth/earth.obj")
+	//m, err := NewMesh("assets/models/crate/crate.obj")
+	m, err := NewMesh("assets/models/earth/earth.obj")
 	if err != nil {
 		panic(err)
 	}
@@ -122,8 +121,7 @@ func main() {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 		rotation += updateCtx.ElapsedTime
-		m.Model = mgl32.HomogRotate3D(float32(rotation), mgl32.Vec3{1, 0, 0}).
-			Mul4(mgl32.HomogRotate3D(float32(rotation), mgl32.Vec3{0, 1, 0}))
+		m.Model = mgl32.HomogRotate3D(float32(rotation), mgl32.Vec3{0, 1, 0})
 
 		m.Draw(renderCtx)
 

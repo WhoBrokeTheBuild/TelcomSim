@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image"
 	"image/draw"
-	_ "image/jpeg"
 	_ "image/png"
 	"path/filepath"
 
@@ -52,6 +51,7 @@ func (t *Texture) Load(filename string) error {
 	if rgba.Stride != rgba.Rect.Size().X*4 {
 		return fmt.Errorf("Unsupported stride")
 	}
+
 	draw.Draw(rgba, rgba.Bounds(), img, image.Point{0, 0}, draw.Src)
 
 	gl.GenTextures(1, &t.ID)
