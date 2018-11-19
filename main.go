@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"runtime"
 
 	gl "github.com/go-gl/gl/v4.1-core/gl"
@@ -12,7 +11,21 @@ import (
 const (
 	WindowWidth  int = 1024
 	WindowHeight int = 768
+
+	InvalidID uint32 = 0
 )
+
+type UpdateContext struct {
+	DeltaTime   float32
+	ElapsedTime float64
+	TotalTime   float64
+}
+
+type RenderContext struct {
+	View       mgl32.Mat4
+	Projection mgl32.Mat4
+	Shader     *Shader
+}
 
 func init() {
 	runtime.LockOSThread()
@@ -54,8 +67,10 @@ func main() {
 		panic(err)
 	}
 
-	version := gl.GoStr(gl.GetString(gl.VERSION))
-	fmt.Println("OpenGL version", version)
+	Infof("OpenGL Version %s", gl.GoStr(gl.GetString(gl.VERSION)))
+	Infof("GLSL Version %s", gl.GoStr(gl.GetString(gl.SHADING_LANGUAGE_VERSION)))
+	Infof("OpenGL Vendor %s", gl.GoStr(gl.GetString(gl.VENDOR)))
+	Infof("OpenGL Renderer %s", gl.GoStr(gl.GetString(gl.RENDERER)))
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.DepthFunc(gl.LESS)
@@ -73,35 +88,44 @@ func main() {
 	defer s.Delete()
 
 	s.Bind()
+	Infof("%v", s.Uniforms)
 
-	projection := mgl32.Perspective(mgl32.DegToRad(45.0), float32(WindowWidth)/float32(WindowHeight), 0.1, 10.0)
-	projectionUniform := s.GetUniformLocation("uProjection")
-	gl.UniformMatrix4fv(projectionUniform, 1, false, &projection[0])
+	light := mgl32.Vec3{3, 3, 3}
+	camera := mgl32.Vec3{3, 3, 3}
 
-	view := mgl32.LookAtV(mgl32.Vec3{3, 3, 3}, mgl32.Vec3{0, 0, 0}, mgl32.Vec3{0, 1, 0})
-	viewUniform := s.GetUniformLocation("uView")
-	gl.UniformMatrix4fv(viewUniform, 1, false, &view[0])
+	gl.Uniform3fv(s.GetUniformLocation("uLight"), 1, &light[0])
+	gl.Uniform3fv(s.GetUniformLocation("uCamera"), 1, &camera[0])
 
-	model := mgl32.Ident4()
-	modelUniform := s.GetUniformLocation("uModel")
-	gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
-
-	color := fromRGB(249, 70, 8)
-	colorUniform := s.GetUniformLocation("uColor")
-	gl.Uniform4fv(colorUniform, 1, &color[0])
-
-	m, err := NewMesh("assets/models/cube.obj")
+	m, err := NewMesh("assets/models/cube/cube.obj")
+	//m, err := NewMesh("assets/models/earth/earth.obj")
 	if err != nil {
 		panic(err)
 	}
 	defer m.Delete()
 
+	updateCtx := &UpdateContext{0, 0, 0}
+	renderCtx := &RenderContext{
+		View:       mgl32.LookAtV(mgl32.Vec3{3, 3, 3}, mgl32.Vec3{0, 0, 0}, mgl32.Vec3{0, 1, 0}),
+		Projection: mgl32.Perspective(mgl32.DegToRad(45.0), float32(WindowWidth)/float32(WindowHeight), 0.1, 10.0),
+		Shader:     s,
+	}
+
+	rotation := 0.0
+	previousTime := glfw.GetTime()
 	for !window.ShouldClose() {
 		glfw.PollEvents()
 
+		time := glfw.GetTime()
+		updateCtx.ElapsedTime = time - previousTime
+		previousTime = time
+
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-		m.Draw()
+		rotation += updateCtx.ElapsedTime
+		m.Model = mgl32.HomogRotate3D(float32(rotation), mgl32.Vec3{1, 0, 0}).
+			Mul4(mgl32.HomogRotate3D(float32(rotation), mgl32.Vec3{0, 1, 0}))
+
+		m.Draw(renderCtx)
 
 		window.SwapBuffers()
 	}

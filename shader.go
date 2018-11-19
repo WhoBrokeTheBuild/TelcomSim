@@ -2,27 +2,28 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"strings"
+	"unicode"
 
 	gl "github.com/go-gl/gl/v4.1-core/gl"
 )
 
 type Shader struct {
-	Name string
-	ID   uint32
+	Name     string
+	ID       uint32
+	Uniforms map[string]int32
 }
 
-const (
-	InvalidShaderID  uint32 = 0
-	InvalidProgramID uint32 = 0
-)
-
 var _shaders = map[string]*Shader{}
+var _versionString string
 
 func NewShader(name string, sources []string) (*Shader, error) {
 	s := &Shader{
-		Name: name,
-		ID:   InvalidProgramID,
+		Name:     name,
+		ID:       InvalidID,
+		Uniforms: map[string]int32{},
 	}
 
 	if old, exists := _shaders[name]; exists {
@@ -41,9 +42,9 @@ func NewShader(name string, sources []string) (*Shader, error) {
 }
 
 func (s *Shader) Delete() {
-	if s.ID != InvalidProgramID {
+	if s.ID != InvalidID {
 		gl.DeleteProgram(s.ID)
-		s.ID = InvalidProgramID
+		s.ID = InvalidID
 	}
 
 	if _, exists := _shaders[s.Name]; exists {
@@ -86,11 +87,13 @@ func (s *Shader) Load(sources []string) error {
 		gl.DeleteShader(id)
 	}
 
+	s.cacheUniforms()
+
 	return nil
 }
 
 func (s *Shader) Bind() error {
-	if s.ID == InvalidProgramID {
+	if s.ID == InvalidID {
 		return fmt.Errorf("Failed to bind program [%v]: Not loaded", s.Name)
 	}
 
@@ -99,19 +102,82 @@ func (s *Shader) Bind() error {
 }
 
 func (s *Shader) GetUniformLocation(name string) int32 {
-	return gl.GetUniformLocation(s.ID, gl.Str(name+"\x00"))
+	if u, ok := s.Uniforms[name]; ok {
+		return u
+	}
+	return -1
+}
+
+func (s *Shader) cacheUniforms() {
+	var count int32
+
+	var size int32
+	var length int32
+	var tp uint32
+	buf := strings.Repeat("\x00", 256)
+
+	gl.GetProgramiv(s.ID, gl.ACTIVE_UNIFORMS, &count)
+	for i := int32(0); i < count; i++ {
+		gl.GetActiveUniform(s.ID, uint32(i), int32(len(buf)), &length, &size, &tp, gl.Str(buf))
+
+		// Force copy
+		name := make([]byte, length)
+		copy(name, []byte(buf[:length]))
+
+		s.Uniforms[string(name)] = gl.GetUniformLocation(s.ID, gl.Str(string(name)+"\x00"))
+	}
+}
+
+func getVersionString() string {
+	if _versionString != "" {
+		return _versionString
+	}
+
+	tmp := gl.GoStr(gl.GetString(gl.SHADING_LANGUAGE_VERSION))
+
+	_versionString = "#version "
+	for i := range tmp {
+		if tmp[i] == ' ' {
+			break
+		}
+		if unicode.IsDigit(rune(tmp[i])) {
+			_versionString += string(tmp[i])
+		}
+	}
+	_versionString += " core\n"
+	return _versionString
+}
+
+func preProcessShader(code string) string {
+	// Prepend `#version`
+	code = getVersionString() + code
+
+	// Append null-terminator (windows)
+	code += "\x00"
+
+	// Clean CRLF (windows)
+	re := regexp.MustCompile(`\r`)
+	code = re.ReplaceAllString(code, "")
+
+	return code
 }
 
 func compileShader(filename string) (uint32, error) {
+	filename = filepath.Clean(filename)
+
 	t := getShaderType(filename)
 	id := gl.CreateShader(t)
 
-	b, err := Asset(filename)
+	Loadf("Shader [%v]", filename)
+	b, err := LoadAsset(filename)
 	if err != nil {
-		return InvalidShaderID, fmt.Errorf("Failed to load file [%v]", filename)
+		return InvalidID, fmt.Errorf("Failed to load file [%v]", filename)
 	}
 
-	code := string(b)
+	code := preProcessShader(string(b))
+
+	re := regexp.MustCompile(`\r`)
+	code = re.ReplaceAllString(code, "")
 
 	ccode, free := gl.Strs(code)
 	gl.ShaderSource(id, 1, ccode, nil)
@@ -127,7 +193,7 @@ func compileShader(filename string) (uint32, error) {
 		log := strings.Repeat("\x00", int(logLen+1))
 		gl.GetShaderInfoLog(id, logLen, nil, gl.Str(log))
 
-		return InvalidShaderID, fmt.Errorf("Failed to compile [%v]: %v", filename, log)
+		return InvalidID, fmt.Errorf("Failed to compile [%v]: %v", filename, log)
 	}
 
 	return id, nil

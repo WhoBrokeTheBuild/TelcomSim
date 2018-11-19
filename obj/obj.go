@@ -21,9 +21,9 @@ type Object struct {
 
 type Material struct {
 	Name                 string
-	Ambient              mgl32.Vec4
-	Diffuse              mgl32.Vec4
-	Specular             mgl32.Vec4
+	Ambient              mgl32.Vec3
+	Diffuse              mgl32.Vec3
+	Specular             mgl32.Vec3
 	Shininess            float32
 	Dissolve             float32
 	AmbientMap           string
@@ -62,12 +62,19 @@ type reader struct {
 }
 
 func (rdr *reader) Read() ([]*Object, error) {
+	rdr.filename = filepath.Clean(rdr.filename)
+	dir := filepath.Dir(rdr.filename)
+
 	objects := []*Object{}
 	materials := map[string]*Material{}
 
 	file, err := rdr.load(rdr.filename)
 	if err != nil {
 		return nil, err
+	}
+
+	if file[len(file)-1] != '\n' {
+		file = append(file, '\n')
 	}
 
 	buf := bytes.NewBuffer(file)
@@ -130,9 +137,9 @@ func (rdr *reader) Read() ([]*Object, error) {
 				if strings.Count(line, "/") == 3 {
 					hasTxcd = true
 					fmt.Sscanf(line[2:], "%d/%d %d/%d %d/%d",
-						&f[0][0], &f[0][2],
-						&f[1][0], &f[1][2],
-						&f[2][0], &f[2][2])
+						&f[0][0], &f[0][1],
+						&f[1][0], &f[1][1],
+						&f[2][0], &f[2][1])
 				} else {
 					hasNorm = true
 					hasTxcd = true
@@ -157,12 +164,12 @@ func (rdr *reader) Read() ([]*Object, error) {
 
 				o.Vertices = append(o.Vertices, verts[f[i][0]-1])
 
-				if hasNorm {
-					o.Normals = append(o.Normals, norms[f[i][2]-1])
-				}
-
 				if hasTxcd {
 					o.TexCoords = append(o.TexCoords, txcds[f[i][1]-1])
+				}
+
+				if hasNorm {
+					o.Normals = append(o.Normals, norms[f[i][2]-1])
 				}
 			}
 		} else if line[0] == 'o' {
@@ -174,10 +181,7 @@ func (rdr *reader) Read() ([]*Object, error) {
 			}
 			objects = append(objects, o)
 		} else if strings.HasPrefix(line, "mtllib") {
-			tmp, err := rdr.readMaterial(filepath.Join(
-				filepath.Dir(rdr.filename),
-				strings.TrimSpace(line[7:]),
-			))
+			tmp, err := rdr.readMaterial(filepath.Join(dir, strings.TrimSpace(line[7:])))
 			if err != nil {
 				return nil, err
 			}
@@ -203,11 +207,18 @@ func (rdr *reader) Read() ([]*Object, error) {
 }
 
 func (rdr *reader) readMaterial(filename string) (map[string]*Material, error) {
+	filename = filepath.Clean(filename)
+	dir := filepath.Dir(filename)
+
 	materials := map[string]*Material{}
 
 	file, err := rdr.load(filename)
 	if err != nil {
 		return nil, err
+	}
+
+	if file[len(file)-1] != '\n' {
+		file = append(file, '\n')
 	}
 
 	buf := bytes.NewBuffer(file)
@@ -234,9 +245,9 @@ func (rdr *reader) readMaterial(filename string) (map[string]*Material, error) {
 			name := strings.TrimSpace(line[7:])
 			m = &Material{
 				Name:     name,
-				Ambient:  mgl32.Vec4{0, 0, 0, 1},
-				Diffuse:  mgl32.Vec4{0, 0, 0, 1},
-				Specular: mgl32.Vec4{0, 0, 0, 1},
+				Ambient:  mgl32.Vec3{0, 0, 0},
+				Diffuse:  mgl32.Vec3{0, 0, 0},
+				Specular: mgl32.Vec3{0, 0, 0},
 			}
 			materials[name] = m
 		} else if line[0] == 'K' {
@@ -262,32 +273,32 @@ func (rdr *reader) readMaterial(filename string) (map[string]*Material, error) {
 		} else if strings.HasPrefix(line, "map_K") {
 			if line[5] == 'a' {
 				// map_Ka
-				m.AmbientMap = strings.TrimSpace(line[7:])
+				m.AmbientMap = filepath.Join(dir, strings.TrimSpace(line[7:]))
 			} else if line[5] == 'd' {
 				// map_Kd
-				m.DiffuseMap = strings.TrimSpace(line[7:])
+				m.DiffuseMap = filepath.Join(dir, strings.TrimSpace(line[7:]))
 			} else if line[5] == 's' {
 				// map_Ks
-				m.SpecularMap = strings.TrimSpace(line[7:])
+				m.SpecularMap = filepath.Join(dir, strings.TrimSpace(line[7:]))
 			}
 		} else if strings.HasPrefix(line, "map_Ns") {
 			// map_Ns
-			m.SpecularHighlightMap = strings.TrimSpace(line[7:])
+			m.SpecularHighlightMap = filepath.Join(dir, strings.TrimSpace(line[7:]))
 		} else if strings.HasPrefix(line, "bump") {
 			// bump
-			m.BumpMap = strings.TrimSpace(line[5:])
+			m.BumpMap = filepath.Join(dir, strings.TrimSpace(line[5:]))
 		} else if strings.HasPrefix(line, "map_bump") {
 			// map_bump
-			m.BumpMap = strings.TrimSpace(line[7:])
+			m.BumpMap = filepath.Join(dir, strings.TrimSpace(line[7:]))
 		} else if strings.HasPrefix(line, "disp") {
 			// disp
-			m.DisplacementMap = strings.TrimSpace(line[5:])
+			m.DisplacementMap = filepath.Join(dir, strings.TrimSpace(line[5:]))
 		} else if strings.HasPrefix(line, "refl") {
 			// refl
-			m.ReflectionMap = strings.TrimSpace(line[5:])
+			m.ReflectionMap = filepath.Join(dir, strings.TrimSpace(line[5:]))
 		} else if strings.HasPrefix(line, "map_d") {
 			// map_d
-			m.AlphaMap = strings.TrimSpace(line[6:])
+			m.AlphaMap = filepath.Join(dir, strings.TrimSpace(line[6:]))
 		}
 	}
 
