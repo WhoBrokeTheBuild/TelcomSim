@@ -22,14 +22,22 @@ endif
 
 all: $(_TARGET)
 
+ifeq ($(OS),Windows_NT)
+clean:
+	del /f $(_TARGET) $(_BINDATA) 2>NUL
+else
+clean:
+	rm -f $(_TARGET) $(_BINDATA)
+endif
+
 ifeq ($(_CONFIG),release)
 $(_BINDATA): $(_ASSETS)
 	@go get github.com/shuLhan/go-bindata/cmd/go-bindata
-	@go-bindata -o $(_BINDATA) $(_BINDIR)/...
+	go-bindata -o $(_BINDATA) $(_BINDIR)/...
 endif
 
 $(_TARGET): $(_SOURCE) $(_BINDATA)
-	go build $(_FLAGS) -o $(_TARGET) .
+	go build -v $(_FLAGS) -o $(_TARGET) .
 
 run: $(_TARGET)
 	./$(_TARGET)

@@ -16,9 +16,9 @@ in vec3 p_ViewDir;
 out vec4 _Color;
 
 void main() {
-    vec3 ambient = uAmbient + texture(uAmbientMap, p_TexCoord).rgb;
-    vec3 diffuse = uDiffuse + texture(uDiffuseMap, p_TexCoord).rgb;
-    vec3 specular = uSpecular + texture(uSpecularMap, p_TexCoord).rgb;
+    vec3 ambient = texture(uAmbientMap, p_TexCoord).rgb;
+    vec3 diffuse = texture(uDiffuseMap, p_TexCoord).rgb;
+    vec3 specular = texture(uSpecularMap, p_TexCoord).rgb;
 
     vec3 normal = normalize(p_Normal.xyz);
     diffuse *= max(dot(normal, p_LightDir), 0.0);

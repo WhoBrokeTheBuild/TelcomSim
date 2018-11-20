@@ -40,6 +40,11 @@ func fromRGB(r, g, b int) mgl32.Vec4 {
 	}
 }
 
+var defaultShader *Shader
+var uiShader *Shader
+
+var uiMesh *Mesh
+
 func main() {
 	var err error
 
@@ -75,44 +80,92 @@ func main() {
 	gl.Enable(gl.DEPTH_TEST)
 	gl.DepthFunc(gl.LESS)
 
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
 	cc := fromRGB(16, 163, 160)
 	gl.ClearColor(cc[0], cc[1], cc[2], 1.0)
 
-	s, err := NewShader("default", []string{
+	defaultShader, err = NewShader("default", []string{
 		"assets/shaders/default.vs.glsl",
 		"assets/shaders/default.fs.glsl",
 	})
 	if err != nil {
 		panic(err)
 	}
-	defer s.Delete()
+	defer defaultShader.Delete()
 
-	s.Bind()
+	uiShader, err = NewShader("ui", []string{
+		"assets/shaders/ui.vs.glsl",
+		"assets/shaders/ui.fs.glsl",
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer uiShader.Delete()
 
-	light := mgl32.Vec3{3, 3, 0}
+	uiMeshData := MeshData{
+		Vertices: []mgl32.Vec3{
+			mgl32.Vec3{float32(WindowWidth), 0, 0},
+			mgl32.Vec3{float32(WindowWidth), float32(WindowHeight), 0},
+			mgl32.Vec3{0, float32(WindowHeight), 0},
+			mgl32.Vec3{float32(WindowWidth), 0, 0},
+			mgl32.Vec3{0, float32(WindowHeight), 0},
+			mgl32.Vec3{0, 0, 0},
+		},
+		TexCoords: []mgl32.Vec2{
+			mgl32.Vec2{1, 0},
+			mgl32.Vec2{1, 1},
+			mgl32.Vec2{0, 1},
+			mgl32.Vec2{1, 0},
+			mgl32.Vec2{0, 1},
+			mgl32.Vec2{0, 0},
+		},
+		DiffuseMap: "assets/ui-test.png",
+	}
+	uiMesh, err = NewMeshFromData([]MeshData{uiMeshData})
+	if err != nil {
+		panic(err)
+	}
+	defer uiMesh.Delete()
+
+	defaultShader.Bind()
+
 	camera := mgl32.Vec3{3, 3, 3}
+	gl.Uniform3fv(defaultShader.GetUniformLocation("uCamera"), 1, &camera[0])
 
-	gl.Uniform3fv(s.GetUniformLocation("uLight"), 1, &light[0])
-	gl.Uniform3fv(s.GetUniformLocation("uCamera"), 1, &camera[0])
+	light := mgl32.Vec3{0, 5, 5}
+	gl.Uniform3fv(defaultShader.GetUniformLocation("uLight"), 1, &light[0])
 
-	//m, err := NewMesh("assets/models/crate/crate.obj")
-	m, err := NewMesh("assets/models/earth/earth.obj")
+	m, err := NewMeshFromFile("assets/models/crate/crate.obj")
 	if err != nil {
 		panic(err)
 	}
 	defer m.Delete()
 
+	aspect := float32(WindowWidth) / float32(WindowHeight)
+
 	updateCtx := &UpdateContext{0, 0, 0}
-	renderCtx := &RenderContext{
-		View:       mgl32.LookAtV(mgl32.Vec3{3, 3, 3}, mgl32.Vec3{0, 0, 0}, mgl32.Vec3{0, 1, 0}),
-		Projection: mgl32.Perspective(mgl32.DegToRad(45.0), float32(WindowWidth)/float32(WindowHeight), 0.1, 10.0),
-		Shader:     s,
+	defaultRenderCtx := &RenderContext{
+		View:       mgl32.LookAtV(mgl32.Vec3{3, 3, 3}, mgl32.Vec3{0, 1, 0}, mgl32.Vec3{0, 1, 0}),
+		Projection: mgl32.Perspective(mgl32.DegToRad(45.0), aspect, 0.1, 100.0),
+		Shader:     defaultShader,
+	}
+	uiRenderCtx := &RenderContext{
+		Projection: mgl32.Ortho2D(0, float32(WindowWidth), float32(WindowHeight), 0),
+		Shader:     uiShader,
 	}
 
 	rotation := 0.0
 	previousTime := glfw.GetTime()
 	for !window.ShouldClose() {
 		glfw.PollEvents()
+
+		if window.GetKey(glfw.KeyF2) == glfw.Press {
+			gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+		} else if window.GetKey(glfw.KeyF2) == glfw.Release {
+			gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
+		}
 
 		time := glfw.GetTime()
 		updateCtx.ElapsedTime = time - previousTime
@@ -122,8 +175,11 @@ func main() {
 
 		rotation += updateCtx.ElapsedTime
 		m.Model = mgl32.HomogRotate3D(float32(rotation), mgl32.Vec3{0, 1, 0})
+		m.Draw(defaultRenderCtx)
 
-		m.Draw(renderCtx)
+		gl.Clear(gl.DEPTH_BUFFER_BIT)
+
+		uiMesh.Draw(uiRenderCtx)
 
 		window.SwapBuffers()
 	}

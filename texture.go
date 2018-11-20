@@ -1,12 +1,11 @@
 package main
 
 import (
-	"bytes"
-	"fmt"
-	"image"
-	"image/draw"
+	_ "image/jpeg"
 	_ "image/png"
 	"path/filepath"
+
+	"github.com/WhoBrokeTheBuild/TelcomSim/stbi"
 
 	gl "github.com/go-gl/gl/v4.1-core/gl"
 )
@@ -36,23 +35,16 @@ func (t *Texture) Load(filename string) error {
 	filename = filepath.Clean(filename)
 	t.Delete()
 
+	stbi.SetFlipVerticallyOnLoad(stbi.True)
+
 	Loadf("Texture [%v]", filename)
 	b, err := LoadAsset(filename)
 	if err != nil {
 		return err
 	}
 
-	img, _, err := image.Decode(bytes.NewBuffer(b))
-	if err != nil {
-		return err
-	}
-
-	rgba := image.NewRGBA(img.Bounds())
-	if rgba.Stride != rgba.Rect.Size().X*4 {
-		return fmt.Errorf("Unsupported stride")
-	}
-
-	draw.Draw(rgba, rgba.Bounds(), img, image.Point{0, 0}, draw.Src)
+	image, w, h, _ := stbi.LoadFromMemory(b, stbi.RGBAlpha)
+	defer stbi.ImageFree(image)
 
 	gl.GenTextures(1, &t.ID)
 	gl.BindTexture(gl.TEXTURE_2D, t.ID)
@@ -61,9 +53,9 @@ func (t *Texture) Load(filename string) error {
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
 	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
-		int32(rgba.Rect.Size().X),
-		int32(rgba.Rect.Size().Y),
-		0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(rgba.Pix))
+		int32(w),
+		int32(h),
+		0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(image))
 	gl.GenerateMipmap(gl.TEXTURE_2D)
 
 	gl.BindTexture(gl.TEXTURE_2D, 0)

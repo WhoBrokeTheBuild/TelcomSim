@@ -171,7 +171,7 @@ func compileShader(filename string) (uint32, error) {
 	Loadf("Shader [%v]", filename)
 	b, err := LoadAsset(filename)
 	if err != nil {
-		return InvalidID, fmt.Errorf("Failed to load file [%v]", filename)
+		return InvalidID, err
 	}
 
 	code := preProcessShader(string(b))
