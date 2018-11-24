@@ -1,17 +1,25 @@
-package main
+package asset
 
 import (
 	"C"
 
-	"github.com/WhoBrokeTheBuild/TelcomSim/obj"
-	gl "github.com/go-gl/gl/v4.1-core/gl"
-)
-import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/WhoBrokeTheBuild/TelcomSim/context"
+	"github.com/WhoBrokeTheBuild/TelcomSim/data"
+	"github.com/WhoBrokeTheBuild/TelcomSim/log"
+	"github.com/WhoBrokeTheBuild/TelcomSim/obj"
+	gl "github.com/go-gl/gl/v4.1-core/gl"
+
 	"github.com/go-gl/mathgl/mgl32"
 )
+
+// Mesh represents a set of OpenGL Vertex Array Objects and Material data
+type Mesh struct {
+	Model  mgl32.Mat4
+	groups []*meshGroup
+}
 
 type meshGroup struct {
 	VAO   uint32
@@ -27,11 +35,7 @@ type meshGroup struct {
 	SpecularMap *Texture
 }
 
-type Mesh struct {
-	Model  mgl32.Mat4
-	groups []*meshGroup
-}
-
+// MeshData is the intermediate data format for loading Meshes from Memory
 type MeshData struct {
 	Vertices  []mgl32.Vec3
 	Normals   []mgl32.Vec3
@@ -47,26 +51,15 @@ type MeshData struct {
 }
 
 const (
+	// PositionAttrID is the attribute ID of _Position in GLSL
 	PositionAttrID uint32 = 0
-	NormalAttrID   uint32 = 1
+	// NormalAttrID is the attribute ID of _Normal in GLSL
+	NormalAttrID uint32 = 1
+	// TexCoordAttrID is the attribute ID of _TexCoord in GLSL
 	TexCoordAttrID uint32 = 2
 )
 
-func NewMeshFromData(data []MeshData) (*Mesh, error) {
-	m := &Mesh{
-		Model:  mgl32.Ident4(),
-		groups: []*meshGroup{},
-	}
-
-	err := m.LoadFromData(data)
-	if err != nil {
-		m.Delete()
-		return nil, err
-	}
-
-	return m, err
-}
-
+// NewMeshFromFile returns a new Mesh from the given file
 func NewMeshFromFile(filename string) (*Mesh, error) {
 	m := &Mesh{
 		Model:  mgl32.Ident4(),
@@ -82,6 +75,23 @@ func NewMeshFromFile(filename string) (*Mesh, error) {
 	return m, nil
 }
 
+// NewMeshFromData returns a new Mesh from the given array of MeshData
+func NewMeshFromData(data []MeshData) (*Mesh, error) {
+	m := &Mesh{
+		Model:  mgl32.Ident4(),
+		groups: []*meshGroup{},
+	}
+
+	err := m.LoadFromData(data)
+	if err != nil {
+		m.Delete()
+		return nil, err
+	}
+
+	return m, err
+}
+
+// Delete frees all resources owned by the Mesh
 func (m *Mesh) Delete() {
 	for _, g := range m.groups {
 		if g.VBO != InvalidID {
@@ -92,15 +102,28 @@ func (m *Mesh) Delete() {
 			gl.DeleteVertexArrays(1, &g.VAO)
 			g.VAO = InvalidID
 		}
+		if g.AmbientMap != nil {
+			g.AmbientMap.Delete()
+			g.AmbientMap = nil
+		}
+		if g.DiffuseMap != nil {
+			g.DiffuseMap.Delete()
+			g.DiffuseMap = nil
+		}
+		if g.SpecularMap != nil {
+			g.SpecularMap.Delete()
+			g.SpecularMap = nil
+		}
 	}
 }
 
+// LoadFromFile loads a mesh from a given file
 func (m *Mesh) LoadFromFile(filename string) error {
 	filename = filepath.Clean(filename)
 	m.Delete()
 
-	Loadf("Mesh [%v]", filename)
-	r := obj.NewReaderEx(filename, LoadAsset)
+	log.Loadf("asset.Mesh [%v]", filename)
+	r := obj.NewReaderEx(filename, obj.LoadFunc(data.Asset))
 	objs, err := r.Read()
 	if err != nil {
 		return err
@@ -114,14 +137,14 @@ func (m *Mesh) LoadFromFile(filename string) error {
 
 	for _, o := range objs {
 		data = append(data, MeshData{
-			Vertices: o.Vertices,
-			Normals: o.Normals,
-			TexCoords: o.TexCoords,
-			Ambient: o.Material.Ambient,
-			Diffuse: o.Material.Diffuse,
-			Specular: o.Material.Specular,
-			AmbientMap: o.Material.AmbientMap,
-			DiffuseMap: o.Material.DiffuseMap,
+			Vertices:    o.Vertices,
+			Normals:     o.Normals,
+			TexCoords:   o.TexCoords,
+			Ambient:     o.Material.Ambient,
+			Diffuse:     o.Material.Diffuse,
+			Specular:    o.Material.Specular,
+			AmbientMap:  o.Material.AmbientMap,
+			DiffuseMap:  o.Material.DiffuseMap,
 			SpecularMap: o.Material.SpecularMap,
 		})
 	}
@@ -134,9 +157,10 @@ func (m *Mesh) LoadFromFile(filename string) error {
 	return nil
 }
 
+// LoadFromData loads a mesh from an array of MeshData
 func (m *Mesh) LoadFromData(data []MeshData) error {
-	var err error 
-	
+	var err error
+
 	for _, d := range data {
 		g := &meshGroup{
 			VAO: InvalidID,
@@ -144,30 +168,30 @@ func (m *Mesh) LoadFromData(data []MeshData) error {
 		}
 		m.groups = append(m.groups, g)
 
-			g.Ambient = d.Ambient
-			g.Diffuse = d.Diffuse
-			g.Specular = d.Specular
+		g.Ambient = d.Ambient
+		g.Diffuse = d.Diffuse
+		g.Specular = d.Specular
 
-			if d.AmbientMap != "" {
-				g.AmbientMap, err = NewTexture(d.AmbientMap)
-				if err != nil {
-					return err
-				}
+		if d.AmbientMap != "" {
+			g.AmbientMap, err = NewTextureFromFile(d.AmbientMap)
+			if err != nil {
+				return err
 			}
+		}
 
-			if d.DiffuseMap != "" {
-				g.DiffuseMap, err = NewTexture(d.DiffuseMap)
-				if err != nil {
-					return err
-				}
+		if d.DiffuseMap != "" {
+			g.DiffuseMap, err = NewTextureFromFile(d.DiffuseMap)
+			if err != nil {
+				return err
 			}
+		}
 
-			if d.SpecularMap != "" {
-				g.SpecularMap, err = NewTexture(d.SpecularMap)
-				if err != nil {
-					return err
-				}
+		if d.SpecularMap != "" {
+			g.SpecularMap, err = NewTextureFromFile(d.SpecularMap)
+			if err != nil {
+				return err
 			}
+		}
 
 		g.Count = int32(len(d.Vertices))
 		hasNorms := len(d.Normals) > 0
@@ -211,37 +235,45 @@ func (m *Mesh) LoadFromData(data []MeshData) error {
 	return nil
 }
 
-func (m *Mesh) Draw(ctx *RenderContext) {
-	ctx.Shader.Bind()
-	
-	gl.UniformMatrix4fv(ctx.Shader.GetUniformLocation("uProjection"), 1, false, &ctx.Projection[0])
-	gl.UniformMatrix4fv(ctx.Shader.GetUniformLocation("uView"), 1, false, &ctx.View[0])
-	gl.UniformMatrix4fv(ctx.Shader.GetUniformLocation("uModel"), 1, false, &m.Model[0])
+// Draw renders a Mesh to the screen
+func (m *Mesh) Draw(ctx *context.Render, s *Shader) {
+	s.Bind()
+
+	gl.UniformMatrix4fv(s.GetUniformLocation("uProjection"), 1, false, &ctx.Projection[0])
+	gl.UniformMatrix4fv(s.GetUniformLocation("uView"), 1, false, &ctx.View[0])
+	gl.UniformMatrix4fv(s.GetUniformLocation("uModel"), 1, false, &m.Model[0])
 
 	for _, g := range m.groups {
-		gl.Uniform3fv(ctx.Shader.GetUniformLocation("uAmbient"), 1, &g.Ambient[0])
-		gl.Uniform3fv(ctx.Shader.GetUniformLocation("uDiffuse"), 1, &g.Diffuse[0])
-		gl.Uniform3fv(ctx.Shader.GetUniformLocation("uSpecular"), 1, &g.Specular[0])
+		gl.Uniform3fv(s.GetUniformLocation("uAmbient"), 1, &g.Ambient[0])
+		gl.Uniform3fv(s.GetUniformLocation("uDiffuse"), 1, &g.Diffuse[0])
+		gl.Uniform3fv(s.GetUniformLocation("uSpecular"), 1, &g.Specular[0])
 
+		gl.Uniform1i(s.GetUniformLocation("uAmbientMap"), 0)
 		if g.AmbientMap != nil {
 			gl.ActiveTexture(gl.TEXTURE0)
 			g.AmbientMap.Bind()
-			gl.Uniform1i(ctx.Shader.GetUniformLocation("uAmbientMap"), 0)
 		}
 
+		gl.Uniform1i(s.GetUniformLocation("uDiffuseMap"), 1)
 		if g.DiffuseMap != nil {
 			gl.ActiveTexture(gl.TEXTURE1)
 			g.DiffuseMap.Bind()
-			gl.Uniform1i(ctx.Shader.GetUniformLocation("uDiffuseMap"), 1)
 		}
 
+		gl.Uniform1i(s.GetUniformLocation("uSpecularMap"), 2)
 		if g.SpecularMap != nil {
 			gl.ActiveTexture(gl.TEXTURE2)
 			g.SpecularMap.Bind()
-			gl.Uniform1i(ctx.Shader.GetUniformLocation("uSpecularMap"), 2)
 		}
 
 		gl.BindVertexArray(g.VAO)
 		gl.DrawArrays(gl.TRIANGLES, 0, g.Count)
+
+		gl.ActiveTexture(gl.TEXTURE0)
+		gl.BindTexture(gl.TEXTURE_2D, 0)
+		gl.ActiveTexture(gl.TEXTURE1)
+		gl.BindTexture(gl.TEXTURE_2D, 0)
+		gl.ActiveTexture(gl.TEXTURE2)
+		gl.BindTexture(gl.TEXTURE_2D, 0)
 	}
 }

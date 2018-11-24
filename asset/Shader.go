@@ -1,4 +1,4 @@
-package main
+package asset
 
 import (
 	"fmt"
@@ -7,57 +7,50 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/WhoBrokeTheBuild/TelcomSim/data"
+	"github.com/WhoBrokeTheBuild/TelcomSim/log"
 	gl "github.com/go-gl/gl/v4.1-core/gl"
 )
 
+// Shader represents an OpenGL Shader Program
 type Shader struct {
-	Name     string
 	ID       uint32
 	Uniforms map[string]int32
 }
 
-var _shaders = map[string]*Shader{}
 var _versionString string
 
-func NewShader(name string, sources []string) (*Shader, error) {
+// NewShaderFromFiles returns a new Shader from the given files
+func NewShaderFromFiles(filenames []string) (*Shader, error) {
 	s := &Shader{
-		Name:     name,
 		ID:       InvalidID,
 		Uniforms: map[string]int32{},
 	}
 
-	if old, exists := _shaders[name]; exists {
-		old.Delete()
-	}
-
-	err := s.Load(sources)
+	err := s.LoadFromFiles(filenames)
 	if err != nil {
 		s.Delete()
 		return nil, err
 	}
 
-	_shaders[name] = s
-
 	return s, nil
 }
 
+// Delete frees all resources owned by the Shader
 func (s *Shader) Delete() {
 	if s.ID != InvalidID {
 		gl.DeleteProgram(s.ID)
 		s.ID = InvalidID
 	}
-
-	if _, exists := _shaders[s.Name]; exists {
-		delete(_shaders, s.Name)
-	}
 }
 
-func (s *Shader) Load(sources []string) error {
+// LoadFromFiles loads a shader from the given files
+func (s *Shader) LoadFromFiles(filenames []string) error {
 	s.Delete()
 
-	shaders := make([]uint32, 0, len(sources))
-	for _, src := range sources {
-		id, err := compileShader(src)
+	shaders := make([]uint32, 0, len(filenames))
+	for _, file := range filenames {
+		id, err := compileShader(file)
 		if err != nil {
 			return err
 		}
@@ -80,7 +73,7 @@ func (s *Shader) Load(sources []string) error {
 		gl.GetProgramInfoLog(s.ID, logLen, nil, gl.Str(log))
 
 		s.Delete()
-		return fmt.Errorf("Failed to link program [%v]: %v", s.Name, log)
+		return fmt.Errorf("Failed to link program: %v", log)
 	}
 
 	for _, id := range shaders {
@@ -92,15 +85,17 @@ func (s *Shader) Load(sources []string) error {
 	return nil
 }
 
+// Bind calls glUseProgram with this Shader's ID
 func (s *Shader) Bind() error {
 	if s.ID == InvalidID {
-		return fmt.Errorf("Failed to bind program [%v]: Not loaded", s.Name)
+		return fmt.Errorf("Failed to bind program: Not loaded")
 	}
 
 	gl.UseProgram(s.ID)
 	return nil
 }
 
+// GetUniformLocation returns the uniform's location ID, or -1
 func (s *Shader) GetUniformLocation(name string) int32 {
 	if u, ok := s.Uniforms[name]; ok {
 		return u
@@ -168,8 +163,8 @@ func compileShader(filename string) (uint32, error) {
 	t := getShaderType(filename)
 	id := gl.CreateShader(t)
 
-	Loadf("Shader [%v]", filename)
-	b, err := LoadAsset(filename)
+	log.Loadf("asset.Shader [%v]", filename)
+	b, err := data.Asset(filename)
 	if err != nil {
 		return InvalidID, err
 	}

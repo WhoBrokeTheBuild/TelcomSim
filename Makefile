@@ -1,40 +1,37 @@
 _CONFIG ?= debug
 _FLAGS  += -tags $(_CONFIG)
 
-ifeq ($(_CONFIG),release)
-	_BINDIR = assets
-	_BINDATA = bindata.go
-	ifeq ($(OS),Windows_NT)
-		_FLAGS += -ldflags -H=windowsgui
-		_ASSETS = $(shell powershell -Command "Get-ChildItem -File -Recurse $(_BINDIR) | Select -exp FullName")
-	else
-		_ASSETS = $(shell find $(_BINDIR))
-	endif
+_ASSET_DIR = data/assets/
+_BINDATA  = data/bindata.go
+_BINFLAGS = -pkg data -prefix $(_ASSET_DIR)
+
+ifeq ($(_CONFIG),debug)
+	_BINFLAGS += -debug
 endif
 
 ifeq ($(OS),Windows_NT)
+	ifeq ($(_CONFIG),release)
+		_FLAGS += -ldflags -H=windowsgui
+	endif
 	_TARGET = TelcomSim.exe
 	_SOURCE = $(shell powershell -Command "Get-ChildItem -Filter '*.go' . | Select -exp FullName")
+	_ASSETS = $(shell powershell -Command "Get-ChildItem -File -Recurse $(_ASSET_DIR) | Select -exp FullName")
+	_CLEAN_CMD = del /f $(_TARGET) $(_BINDATA) 2>NUL
 else
 	_TARGET = TelcomSim
 	_SOURCE = $(shell find . -name '*.go')
+	_ASSETS = $(shell find $(_ASSET_DIR))
+	_CLEAN_CMD = rm -f $(_TARGET) $(_BINDATA)
 endif
 
 all: $(_TARGET)
 
-ifeq ($(OS),Windows_NT)
 clean:
-	del /f $(_TARGET) $(_BINDATA) 2>NUL
-else
-clean:
-	rm -f $(_TARGET) $(_BINDATA)
-endif
+	$(_CLEAN_CMD)
 
-ifeq ($(_CONFIG),release)
 $(_BINDATA): $(_ASSETS)
 	@go get github.com/shuLhan/go-bindata/cmd/go-bindata
-	go-bindata -o $(_BINDATA) $(_BINDIR)/...
-endif
+	go-bindata $(_BINFLAGS) -o $(_BINDATA) $(_ASSET_DIR)...
 
 $(_TARGET): $(_SOURCE) $(_BINDATA)
 	go build -v $(_FLAGS) -o $(_TARGET) .
