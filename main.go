@@ -99,8 +99,10 @@ func main() {
 	gl.Enable(gl.BLEND)
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
-	cc := fromRGB(16, 163, 160)
-	gl.ClearColor(cc[0], cc[1], cc[2], 1.0)
+	//music, err := asset.NewSoundFromFile("music/bgm.mp3")
+	//if err != nil {
+	//	panic(err)
+	//}
 
 	hud, err = ui.NewOverlay(mgl32.Vec2{float32(windowWidth), float32(windowHeight)})
 	if err != nil {
@@ -127,7 +129,7 @@ func main() {
 	light := mgl32.Vec3{3, 3, 3}
 	gl.Uniform3fv(defaultShader.GetUniformLocation("uLight"), 1, &light[0])
 
-	m, err := asset.NewMeshFromFile("models/monkey.obj")
+	m, err := asset.NewModelFromFile("models/crate/crate.obj")
 	if err != nil {
 		panic(err)
 	}
@@ -137,8 +139,9 @@ func main() {
 
 	updateCtx := &context.Update{}
 	renderCtx := &context.Render{
-		View:       mgl32.LookAtV(mgl32.Vec3{3, 2, 3}, mgl32.Vec3{0, 0, 0}, mgl32.Vec3{0, 1, 0}),
+		View:       mgl32.LookAtV(mgl32.Vec3{2, 2, 2}, mgl32.Vec3{0, 0, 0}, mgl32.Vec3{0, 1, 0}),
 		Projection: mgl32.Perspective(mgl32.DegToRad(45.0), aspect, 0.1, 100.0),
+		Shader:     defaultShader,
 	}
 
 	rotation := 0.0
@@ -152,13 +155,15 @@ func main() {
 		hud.Update(updateCtx)
 		rotation += ctx.ElapsedTime
 
-		m.Model = mgl32.HomogRotate3D(float32(rotation), mgl32.Vec3{0, 1, 0})
+		m.Transform = mgl32.HomogRotate3D(float32(rotation), mgl32.Vec3{0, 1, 0})
 	}
 
 	render := func(ctx *context.Render) {
-		m.Draw(renderCtx, defaultShader)
+		m.Draw(renderCtx)
 		hud.Draw()
 	}
+
+	//music.Play()
 
 	const (
 		frameDelay = 1.0 / 60.0
@@ -182,7 +187,16 @@ func main() {
 		updateCtx.ElapsedTime = elapsed
 
 		if fpsElap >= fpsDelay {
-			fps.SetText(fmt.Sprintf("FPS %d", frameCount))
+			if fps != nil {
+				if frameCount < 30 {
+					fps.Color = color.RGBA{255, 0, 0, 255}
+				} else if frameCount < 60 {
+					fps.Color = color.RGBA{255, 255, 0, 255}
+				} else {
+					fps.Color = color.RGBA{0, 255, 0, 255}
+				}
+				fps.SetText(fmt.Sprintf("FPS %d", frameCount))
+			}
 			fpsElap = 0.0
 			frameCount = 0
 		}
@@ -194,50 +208,29 @@ func main() {
 			frameCount++
 			frameElap = 0.0
 
+			cc := fromRGB(16, 163, 160)
+			gl.ClearColor(cc[0], cc[1], cc[2], 1.0)
 			gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
 			render(renderCtx)
+
 			window.SwapBuffers()
 		}
 	}
 }
 
 func initUI() {
-	box := ui.NewWindow(
-		ui.NewImageFromFile("ui/menu_sheet.png", image.Rect(0, 376, 40, 436)),
-		ui.NewImageFromFile("ui/menu_sheet.png", image.Rect(60, 376, 100, 436)),
-		ui.NewImageFromFile("ui/menu_sheet.png", image.Rect(0, 426, 40, 476)),
-		ui.NewImageFromFile("ui/menu_sheet.png", image.Rect(60, 426, 100, 466)),
-		ui.NewImageFromFile("ui/menu_sheet.png", image.Rect(40, 376, 60, 436)),
-		ui.NewImageFromFile("ui/menu_sheet.png", image.Rect(40, 426, 60, 466)),
-		ui.NewImageFromFile("ui/menu_sheet.png", image.Rect(0, 406, 40, 436)),
-		ui.NewImageFromFile("ui/menu_sheet.png", image.Rect(60, 406, 100, 436)),
-		ui.NewImageFromFile("ui/menu_sheet.png", image.Rect(40, 406, 60, 436)),
-	)
-	box.SetPosition(image.Pt(100, 100))
-	box.SetSize(image.Pt(200, 200))
-	hud.AddComponent(box)
-
-	hud.AddComponent(ui.NewImageFromFile("ui/menubar.png", image.ZR))
+	hud.AddComponent(ui.NewImageFromFile("ui/menubar.png"))
 
 	fps = ui.NewText("FPS 00", "ui/default.ttf", 18.0, color.White)
-	fps.SetPosition(image.Pt(windowWidth-60, 5))
+	fps.SetPosition(mgl32.Vec2{float32(windowWidth) - 60, 5})
 	hud.AddComponent(fps)
 
-	/*
+	menu := ui.NewText("File  Edit  Window", "ui/default.ttf", 18.0, color.White)
+	menu.SetPosition(mgl32.Vec2{10, 5})
+	hud.AddComponent(menu)
 
-		menu, err := ui.NewText("File  Edit  Window", "ui/default.ttf", 18.0, color.White)
-		if err != nil {
-			panic(err)
-		}
-		menu.SetPosition(image.Pt(10, 5))
-		hud.AddComponent(menu)
-
-
-		box, err := ui.NewImageFromFile("models/crate/crate.png", image.Rect(0, 0, 160, 320))
-		if err != nil {
-			panic(err)
-		}
-		box.SetPosition(image.Pt(100, 100))
-		hud.AddComponent(box)
-	*/
+	//box := ui.NewImageFromFile("models/crate/crate.png")
+	//box.SetPosition(mgl32.Vec2{100, 100})
+	//hud.AddComponent(box)
 }

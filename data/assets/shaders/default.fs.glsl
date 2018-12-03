@@ -1,6 +1,6 @@
-uniform vec3 uAmbient;
-uniform vec3 uDiffuse;
-uniform vec3 uSpecular;
+uniform vec4 uAmbient;
+uniform vec4 uDiffuse;
+uniform vec4 uSpecular;
 
 uniform sampler2D uAmbientMap; 
 uniform sampler2D uDiffuseMap; 
@@ -16,9 +16,9 @@ in vec3 p_ViewDir;
 out vec4 _Color;
 
 void main() {
-    vec3 ambient = uAmbient + texture(uAmbientMap, p_TexCoord).rgb;
-    vec3 diffuse = uDiffuse + texture(uDiffuseMap, p_TexCoord).rgb;
-    vec3 specular = uSpecular + texture(uSpecularMap, p_TexCoord).rgb;
+    vec4 ambient = uAmbient + texture(uAmbientMap, p_TexCoord);
+    vec4 diffuse = uDiffuse + texture(uDiffuseMap, p_TexCoord);
+    vec4 specular = uSpecular + texture(uSpecularMap, p_TexCoord);
 
     vec3 normal = normalize(p_Normal.xyz);
     diffuse *= max(dot(normal, p_LightDir), 0.0);
@@ -26,5 +26,5 @@ void main() {
     vec3 halfway = normalize(p_LightDir + p_ViewDir);
     specular *= pow(max(dot(normal, halfway), 0.0), 16.0) * 0.5;
 
-    _Color = vec4(ambient + diffuse + specular, 1.0);
+    _Color = texture(uDiffuseMap, p_TexCoord);
 }

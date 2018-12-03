@@ -2,9 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"image"
-	"image/color"
-	"image/draw"
 
 	"github.com/WhoBrokeTheBuild/TelcomSim/asset"
 	"github.com/WhoBrokeTheBuild/TelcomSim/context"
@@ -14,14 +11,15 @@ import (
 
 // Overlay represents a UI layer
 type Overlay struct {
-	Buffer     *image.RGBA
-	Texture    *asset.Texture
+	Buffer     *asset.Texture
 	Shader     *asset.Shader
 	Mesh       *asset.Mesh
 	RenderCtx  context.Render
 	Size       mgl32.Vec2
 	Components []Component
 
+	frameID           uint32
+	depthID           uint32
 	needTextureUpdate bool
 }
 
@@ -35,52 +33,52 @@ func NewOverlay(size mgl32.Vec2) (*Overlay, error) {
 		return nil, err
 	}
 
-	data := asset.MeshData{
-		Vertices: []mgl32.Vec3{
-			mgl32.Vec3{size.X(), 0, 0},
-			mgl32.Vec3{size.X(), size.Y(), 0},
-			mgl32.Vec3{0, size.Y(), 0},
-			mgl32.Vec3{size.X(), 0, 0},
-			mgl32.Vec3{0, size.Y(), 0},
-			mgl32.Vec3{0, 0, 0},
-		},
-		TexCoords: []mgl32.Vec2{
-			mgl32.Vec2{1, 0},
-			mgl32.Vec2{1, 1},
-			mgl32.Vec2{0, 1},
-			mgl32.Vec2{1, 0},
-			mgl32.Vec2{0, 1},
-			mgl32.Vec2{0, 0},
-		},
-	}
-	mesh, err := asset.NewMeshFromData([]asset.MeshData{data})
+	mesh, err := new2DMesh(mgl32.Vec4{0, 0, size.X(), size.Y()}, mgl32.Vec4{0, 1, 1, 0})
 	if err != nil {
 		return nil, err
 	}
 
-	rgba := image.NewRGBA(image.Rectangle{
-		image.Point{0, 0},
-		image.Point{int(size.X()), int(size.Y())},
-	})
-	if rgba.Stride != rgba.Rect.Size().X*4 {
-		return nil, fmt.Errorf("Failed to create UI image, Unsupported Stride")
-	}
+	var (
+		frameID uint32
+		depthID uint32
+	)
 
-	texture, err := asset.NewTextureFromData(rgba.Pix, int(size.X()), int(size.Y()))
+	buffer, err := asset.NewTextureFromData(nil, gl.RGBA8, gl.RGBA, int(size.X()), int(size.Y()))
 	if err != nil {
 		return nil, err
 	}
+
+	gl.GenRenderbuffers(1, &depthID)
+	gl.BindRenderbuffer(gl.RENDERBUFFER, depthID)
+	gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT, int32(size.X()), int32(size.Y()))
+	gl.BindRenderbuffer(gl.RENDERBUFFER, 0)
+
+	gl.GenFramebuffers(1, &frameID)
+	gl.BindFramebuffer(gl.FRAMEBUFFER, frameID)
+
+	gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, buffer.ID, 0)
+	gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthID)
+
+	status := gl.CheckFramebufferStatus(gl.FRAMEBUFFER)
+	if status != gl.FRAMEBUFFER_COMPLETE {
+		return nil, fmt.Errorf("Failed to create Framebuffer")
+	}
+
+	gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
 
 	return &Overlay{
-		Buffer:  rgba,
-		Texture: texture,
-		Shader:  shader,
-		Mesh:    mesh,
-		Size:    size,
+		Buffer: buffer,
+		Shader: shader,
+		Mesh:   mesh,
+		Size:   size,
 
 		RenderCtx: context.Render{
 			Projection: mgl32.Ortho2D(0, size.X(), 0, size.Y()),
+			Shader:     shader,
 		},
+
+		frameID: frameID,
+		depthID: depthID,
 
 		needTextureUpdate: true,
 	}, nil
@@ -88,17 +86,29 @@ func NewOverlay(size mgl32.Vec2) (*Overlay, error) {
 
 // Delete frees all resources owned by the Overlay
 func (o *Overlay) Delete() {
-	if o.Texture != nil {
-		o.Texture.Delete()
-		o.Texture = nil
+	if o.Buffer != nil {
+		o.Buffer.Delete()
+		o.Buffer = nil
 	}
+
 	if o.Shader != nil {
 		o.Shader.Delete()
 		o.Shader = nil
 	}
+
 	if o.Mesh != nil {
 		o.Mesh.Delete()
 		o.Mesh = nil
+	}
+
+	if o.depthID != 0 {
+		gl.DeleteRenderbuffers(1, &o.depthID)
+		o.depthID = 0
+	}
+
+	if o.frameID != 0 {
+		gl.DeleteFramebuffers(1, &o.frameID)
+		o.frameID = 0
 	}
 }
 
@@ -107,47 +117,31 @@ func (o *Overlay) Update(ctx *context.Update) {
 
 }
 
-func (o *Overlay) clear() {
-	draw.Draw(o.Buffer, o.Buffer.Bounds(), &image.Uniform{color.RGBA{0, 0, 0, 0}}, image.ZP, draw.Src)
-}
-
 // Draw renders the current buffer to the screen
 func (o *Overlay) Draw() {
-	o.clear()
-	for _, c := range o.Components {
-		c.Draw(o.Buffer)
-	}
-
-	o.needTextureUpdate = true
-	if o.needTextureUpdate {
-		o.updateTexture()
-		o.needTextureUpdate = false
-	}
-
-	gl.Clear(gl.DEPTH_BUFFER_BIT)
-
 	o.Shader.Bind()
+	gl.UniformMatrix4fv(o.RenderCtx.GetShader().GetUniformLocation("uProjection"), 1, false, o.RenderCtx.GetProjectionPtr())
+
+	gl.BindFramebuffer(gl.FRAMEBUFFER, o.frameID)
+	gl.ClearColor(0, 0, 0, 0)
+	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+	for _, c := range o.Components {
+		c.Draw(&o.RenderCtx)
+		gl.Clear(gl.DEPTH_BUFFER_BIT)
+	}
+	gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
 
 	gl.Uniform1i(o.Shader.GetUniformLocation("uTexture"), 0)
-	if o.Buffer != nil {
-		gl.ActiveTexture(gl.TEXTURE0)
-		o.Texture.Bind()
-	} else {
-		gl.ActiveTexture(gl.TEXTURE1)
-		gl.BindTexture(gl.TEXTURE_2D, 0)
-	}
+	gl.ActiveTexture(gl.TEXTURE0)
+	o.Buffer.Bind()
 
-	if o.Mesh != nil {
-		o.Mesh.Draw(&o.RenderCtx, o.Shader)
-	}
+	gl.Clear(gl.DEPTH_BUFFER_BIT)
+	o.Mesh.Draw(&o.RenderCtx)
+
+	gl.BindTexture(gl.TEXTURE_2D, 0)
 }
 
 // AddComponent adds the given Component as a child node of the Overlay
 func (o *Overlay) AddComponent(c Component) {
 	o.Components = append(o.Components, c)
-}
-
-func (o *Overlay) updateTexture() {
-	o.Texture.Bind()
-	gl.TexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, int32(o.Size.X()), int32(o.Size.Y()), gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(o.Buffer.Pix))
 }

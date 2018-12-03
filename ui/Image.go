@@ -1,9 +1,6 @@
 package ui
 
 import (
-	"bytes"
-	"image"
-	"image/draw"
 
 	// JPEG support
 	_ "image/jpeg"
@@ -11,27 +8,25 @@ import (
 	// PNG support
 	_ "image/png"
 
-	"github.com/WhoBrokeTheBuild/TelcomSim/data"
+	"github.com/WhoBrokeTheBuild/TelcomSim/asset"
+	"github.com/WhoBrokeTheBuild/TelcomSim/context"
 	"github.com/WhoBrokeTheBuild/TelcomSim/log"
+	gl "github.com/go-gl/gl/v4.1-core/gl"
+	"github.com/go-gl/mathgl/mgl32"
 )
-
-var _images map[string]*image.RGBA
-
-func init() {
-	_images = map[string]*image.RGBA{}
-}
 
 // Image is a Component that draws an image to the screen
 type Image struct {
 	BaseComponent
-
-	RGBA *image.RGBA
+	Bounds  mgl32.Vec4
+	Texture *asset.Texture
+	Mesh    *asset.Mesh
 }
 
 // NewImageFromFile returns a new Image from the given file
-func NewImageFromFile(filename string, bounds image.Rectangle) *Image {
+func NewImageFromFile(filename string) *Image {
 	c := &Image{}
-	err := c.LoadFromFile(filename, bounds)
+	err := c.LoadFromFile(filename)
 	if err != nil {
 		c.Delete()
 		log.Errorf("%v", err)
@@ -41,9 +36,9 @@ func NewImageFromFile(filename string, bounds image.Rectangle) *Image {
 }
 
 // NewImageFromData returns a new Image from the given data, width, and height
-func NewImageFromData(data []uint8, width, height int) *Image {
+func NewImageFromData(data []uint8, intFormat uint32, format int32, width, height int) *Image {
 	c := &Image{}
-	err := c.LoadFromData(data, width, height)
+	err := c.LoadFromData(data, intFormat, format, width, height)
 	if err != nil {
 		c.Delete()
 		log.Errorf("%v", err)
@@ -54,62 +49,94 @@ func NewImageFromData(data []uint8, width, height int) *Image {
 
 // Delete frees all resources owned by the Image
 func (c *Image) Delete() {
+	if c.Texture != nil {
+		c.Texture.Delete()
+		c.Texture = nil
+	}
 }
 
 // LoadFromFile loads an Image from the given file
-func (c *Image) LoadFromFile(filename string, bounds image.Rectangle) error {
-	var rgba *image.RGBA
+func (c *Image) LoadFromFile(filename string) error {
+	var err error
+	c.Delete()
 
-	if tmp, found := _images[filename]; found {
-		log.Loadf("ui.Image [%v]+", filename)
-		rgba = tmp
-	} else {
-		log.Loadf("ui.Image [%v]", filename)
-		b, err := data.Asset(filename)
-		if err != nil {
-			return err
-		}
-
-		img, _, err := image.Decode(bytes.NewReader(b))
-		if err != nil {
-			return err
-		}
-
-		rgba = image.NewRGBA(img.Bounds())
-		draw.Draw(rgba, img.Bounds(), img, image.ZP, draw.Src)
-		_images[filename] = rgba
+	c.Texture, err = asset.NewTextureFromFile(filename)
+	if err != nil {
+		c.Delete()
+		return err
 	}
 
-	if bounds.Empty() {
-		c.RGBA = rgba
-	} else {
-		log.Infof("Clipping to %v", bounds)
-		c.RGBA = rgba.SubImage(bounds).(*image.RGBA)
-	}
-
-	c.SetSize(c.RGBA.Bounds().Size())
+	c.SetSize(c.Texture.Size)
 
 	return nil
 }
 
 // LoadFromData loads an Image from the given data, width, and height
-func (c *Image) LoadFromData(data []uint8, width, height int) error {
-	c.RGBA = &image.RGBA{
-		Pix:    data,
-		Stride: 4 * width,
-		Rect:   image.Rectangle{image.ZP, image.Pt(width, height)},
+func (c *Image) LoadFromData(data []uint8, intFormat uint32, format int32, width, height int) error {
+	var err error
+	c.Delete()
+
+	c.Texture, err = asset.NewTextureFromData(data, intFormat, format, width, height)
+	if err != nil {
+		c.Delete()
+		return err
 	}
+
+	c.SetSize(c.Texture.Size)
+
 	return nil
 }
 
-func (c *Image) bounds() image.Rectangle {
-	return image.Rectangle{
-		c.GetPosition().Sub(c.RGBA.Bounds().Min),
-		c.GetPosition().Add(c.RGBA.Bounds().Max),
+// SetPosition sets the Image's position
+func (c *Image) SetPosition(pos mgl32.Vec2) {
+	c.BaseComponent.SetPosition(pos)
+	c.updateMesh()
+}
+
+// SetSize sets the Image's size
+func (c *Image) SetSize(size mgl32.Vec2) {
+	c.BaseComponent.SetSize(size)
+	c.updateMesh()
+}
+
+func (c *Image) updateMesh() {
+	var err error
+	pos := c.GetPosition()
+	size := c.GetSize()
+
+	x := pos.X()
+	y := pos.Y()
+	w := size.X()
+	h := size.Y()
+
+	if c.Mesh == nil {
+		c.Mesh, err = new2DMesh(
+			mgl32.Vec4{x, y, x + w, y + h},
+			mgl32.Vec4{0, 0, 1, 1})
+		if err != nil {
+			c.Delete()
+			log.Errorf("%v", err)
+		}
+	} else {
+		err = update2DMesh(c.Mesh,
+			mgl32.Vec4{x, y, x + w, y + h},
+			mgl32.Vec4{0, 0, 1, 1})
+		if err != nil {
+			c.Delete()
+			log.Errorf("%v", err)
+		}
 	}
 }
 
 // Draw renders the Image to the buffer
-func (c *Image) Draw(buffer draw.Image) {
-	draw.Draw(buffer, c.bounds(), c.RGBA, image.ZP, draw.Src)
+func (c *Image) Draw(ctx *context.Render) {
+	gl.Uniform1i(ctx.Shader.GetUniformLocation("uTexture"), 0)
+
+	gl.ActiveTexture(gl.TEXTURE0)
+	if c.Texture != nil {
+		c.Texture.Bind()
+	}
+	if c.Mesh != nil {
+		c.Mesh.Draw(ctx)
+	}
 }

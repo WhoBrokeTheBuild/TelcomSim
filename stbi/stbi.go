@@ -11,6 +11,8 @@ const (
 	True C.int = 1
 	// False = 0
 	False C.int = 0
+	// Null = 0
+	Null C.int = 0
 
 	// Default = STBI_default
 	Default C.int = C.STBI_default
@@ -30,14 +32,14 @@ func SetFlipVerticallyOnLoad(f C.int) {
 }
 
 // Load = stbi_load
-func Load(filename string, desiredChannels C.int) (*C.uchar, int, int, C.int) {
-	var width, height, channels C.int
-	cstr := C.CString(filename)
-	defer C.free(unsafe.Pointer(cstr))
-
-	return C.stbi_load(cstr, &width, &height, &channels, desiredChannels),
-		int(width), int(height), channels
-}
+//func Load(filename string, desiredChannels C.int) (*C.uchar, int, int, C.int) {
+//	var width, height, channels C.int
+//	cstr := C.CString(filename)
+//	defer C.free(unsafe.Pointer(cstr))
+//
+//	return C.stbi_load(cstr, &width, &height, &channels, desiredChannels),
+//		int(width), int(height), channels
+//}
 
 // LoadFromMemory = stbi_load_from_memory
 func LoadFromMemory(buffer []byte, desiredChannels C.int) (*C.uchar, int, int, C.int) {
